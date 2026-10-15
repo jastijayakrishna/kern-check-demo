@@ -96,6 +96,7 @@ def main():
     rows, reasons, crashes = [], defaultdict(list), defaultdict(list)
     decisions, statuses, by_agent = Counter(), Counter(), defaultdict(Counter)
     sums, seconds = Counter(), []
+    phases = {}
     kinds = {"blocked": Counter(), "look": Counter()}
     known_bad = []
     for k in wanted:
@@ -113,6 +114,14 @@ def main():
         secs = timing.get("seconds")
         if isinstance(secs, (int, float)):
             seconds.append(secs)
+        printed = load(os.path.join(folder, "check.json")) if folder else None
+        if isinstance(printed, dict) and isinstance(printed.get("phases"), dict):
+            for phase, v in printed["phases"].items():
+                if isinstance(v, (int, float)):
+                    phases.setdefault(phase, []).append(v)
+            for part, v in (printed["phases"].get("tests_detail") or {}).items():
+                if isinstance(v, (int, float)):
+                    phases.setdefault("tests: " + part.split("-")[0], []).append(v)
         if not isinstance(receipt, dict):
             why = crash_reason(folder, timing)
             crashes[shape(why)].append((name, why))
@@ -172,6 +181,8 @@ def main():
             md.append(f"- Items behind `{side}`, by kind: " + ", ".join(f"{k} {v}" for k, v in kinds[side].most_common()))
     if seconds:
         md.append(f"- Seconds per pull request: median {statistics.median(seconds):.0f}, longest {max(seconds):.0f}, all together {sum(seconds):.0f}")
+    if phases:
+        md.append("- Where the time goes (median seconds, longest): " + ", ".join(f"{k} {statistics.median(v):.0f} ({max(v):.0f})" for k, v in sorted(phases.items())))
     md.append("- By agent: " + "; ".join(f"{a}: " + ", ".join(f"{v} {k}" for k, v in c.most_common()) for a, c in sorted(by_agent.items())))
     if known_bad:
         md += ["", "## Known-bad pull requests (later reverted or fixed)", "",
