@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Summarize a farm run: one row per pull request from its receipt, then totals and every reason the tests did not run.
-
-Usage: python3 summarize.py <artifacts-dir> <prs.json> [summary.md]
-
-<artifacts-dir> holds one folder per job, as actions/download-artifact writes them: receipt-<owner>__<name>__<number>/ with
-receipt.json, receipt.md, timing.json, step.log, check.json and check.err (any of them may be missing), and plan/plan.json, the list
-the run was given. Only the standard library is used.
-"""
 import json
 import os
 import re
@@ -37,7 +29,6 @@ def key_of(repo, number):
 
 
 def cell(s, limit=None):
-    """Text for a table cell: one line, no pipes, no HTML."""
     s = " ".join(str(s).split())
     if limit and len(s) > limit:
         s = s[: limit - 1] + "…"
@@ -55,7 +46,6 @@ def count(v):
 
 
 def crash_reason(folder, timing):
-    """Why a job left no receipt, from the most specific source there is."""
     err = text(os.path.join(folder, "check.err"), tail=20000) if folder else ""
     if timing and timing.get("finished") is False and timing.get("why"):
         return str(timing["why"])
@@ -79,7 +69,6 @@ def crash_reason(folder, timing):
 
 
 def shape(reason):
-    """A reason with its specifics taken out, so the same problem in different pull requests groups together."""
     r = re.sub(r"\b[0-9a-f]{7,40}\b", "<sha>", reason)
     r = re.sub(r"`[^`]*`", "`…`", r)
     r = re.sub(r"\"[^\"]*\"", "\"…\"", r)
@@ -114,7 +103,6 @@ def main():
         folder = folders.get(k)
         receipt = load(os.path.join(folder, "receipt.json")) if folder else None
         if not isinstance(receipt, dict) and folder:
-            # kern check also prints a short summary (decision, tests, ...) on stdout: better than nothing.
             printed = load(os.path.join(folder, "check.json"))
             receipt = printed if isinstance(printed, dict) and printed.get("decision") else None
         timing = (load(os.path.join(folder, "timing.json")) if folder else None) or {}

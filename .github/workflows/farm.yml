@@ -1,9 +1,3 @@
-# Kern farm: `kern check` on real merged pull requests written by AI agents, one job per pull request, then one summary.
-#
-# Meant for a separate public test repository: copy this folder there as `farm/` and this file to `.github/workflows/farm.yml`.
-# Each job builds Kern from jastijayakrishna/Kerner (ref `one`), sets up gVisor and a throwaway verifier exactly as drive/action.yml does,
-# fetches the pull request's two commits, runs `kern check` with the AI part off, and uploads the receipt, the timing and the log.
-# The last job reads every receipt with summarize.py and writes the job summary and summary.md.
 name: farm
 
 on:
@@ -22,7 +16,7 @@ jobs:
     outputs:
       prs: ${{ steps.list.outputs.prs }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           sparse-checkout: farm
@@ -33,28 +27,25 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "::error::limit must be a whole number"; exit 1; }
-          # The old side is the merge base GitHub reports for base_sha and head_sha: where the pull request's branch left its base,
-          # as Kern's own workflows use it. For most pull requests it is base_sha itself.
           jq -c --argjson n "$LIMIT" '(if $n > 0 then .[:$n] else . end)
             | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha) })' farm/prs.json > plan.json
           [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::farm/prs.json lists no pull requests"; exit 1; }
           echo "prs=$(cat plan.json)" >> "$GITHUB_OUTPUT"
           echo "$(jq length plan.json) pull requests" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: plan
           path: plan.json
 
-  # Kern is built once, static (musl), as Kern's own CI builds it: it copies its own binary into the node:22-bookworm-slim sandbox.
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: jastijayakrishna/Kerner
           ref: one
           persist-credentials: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/.cargo/registry
@@ -70,7 +61,7 @@ jobs:
           CC_x86_64_unknown_linux_musl=musl-gcc cargo build --release --locked --target x86_64-unknown-linux-musl
           target/x86_64-unknown-linux-musl/release/kern --version
           echo "Kern at $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: kern
           path: target/x86_64-unknown-linux-musl/release/kern
@@ -96,13 +87,13 @@ jobs:
       KERN_BIN: ${{ github.workspace }}/bin/kern
     steps:
       - name: Check out the farm's list
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: farm-repo
           sparse-checkout: farm
           persist-credentials: false
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: kern
           path: bin
@@ -112,7 +103,6 @@ jobs:
           echo build > "$RUNNER_TEMP/stage"
           chmod +x "$KERN_BIN" && "$KERN_BIN" --version
 
-      # Copied from drive/action.yml.
       - name: gVisor
         shell: bash
         run: |
@@ -127,13 +117,11 @@ jobs:
             sudo runsc install && sudo systemctl restart docker
           fi
 
-      # Copied from drive/action.yml: verifier.json and operator.json in $RUNNER_TEMP/kern-drive.
       - name: Verifier
         shell: bash
         run: |
           echo verifier > "$RUNNER_TEMP/stage"
           [ -x "$KERN_BIN" ] || { echo "::error::Kern is not installed: the Install Kern step failed"; exit 1; }
-          # A throwaway verifier for this job, set up with Kern's own commands: the tools it trusts are pinned by digest.
           W="$RUNNER_TEMP/kern-drive" && rm -rf "$W" && mkdir -p "$W/checks" && cd "$W"
           real() { readlink -f "$(command -v "$1")"; }
           hash() { sha256sum "$1" | cut -d' ' -f1; }
@@ -162,8 +150,6 @@ jobs:
           [ "$OLD_SHA" = "$BASE_SHA" ] || shas="$shas $OLD_SHA"
           git init -q pr
           git -C pr remote add origin "https://github.com/$REPO.git"
-          # No --filter=blob:none: Kern reads every blob of both trees (ls-tree -l, cat-file) with git's network protocols turned off,
-          # so a partial clone would fail on the first missing blob.
           for try in 1 2 3; do
             git -C pr fetch --quiet --no-tags --depth=200 origin $shas && break
             [ "$try" = 3 ] && { echo "::error::could not fetch $REPO at $shas"; exit 1; }
@@ -196,7 +182,6 @@ jobs:
             '{ repo: $repo, number: $number, agent: $agent, base_sha: $base, old_sha: $old, head_sha: $head, exit_code: $code,
                seconds: $seconds, fetch_seconds: $fetch, finished: true }' > timing.json
           echo "kern check ended with $code after $seconds s"
-          # kern check exits 0 for every decision; anything else means it crashed, and the job shows red.
           exit "$code"
 
       - name: Clean
@@ -211,9 +196,12 @@ jobs:
         if: always()
         run: |
           W="$RUNNER_TEMP/kern-drive" && A="$RUNNER_TEMP/artifact" && mkdir -p "$A"
-          for f in out/receipt.json out/receipt.md check.json check.err step.log timing.json; do
+          for f in out/receipt.json out/receipt.md out/setup.json check.json check.err step.log timing.json; do
             if [ -f "$W/$f" ]; then cp "$W/$f" "$A/"; fi
           done
+          for f in "$W"/out/tests-*.err; do [ -f "$f" ] && cp "$f" "$A/"; done
+          for f in "$W"/out/tests-*.out; do [ -f "$f" ] && tail -c 200000 "$f" > "$A/$(basename "$f")"; done
+          true
           if [ ! -f "$A/timing.json" ]; then
             stage=$(cat "$RUNNER_TEMP/stage" 2>/dev/null || echo setup)
             if [ "$stage" = check ]; then why="kern check did not finish: the step timed out or the job was cancelled"; else why="the job stopped before kern check ran (step: $stage)"; fi
@@ -226,7 +214,7 @@ jobs:
 
       - name: Upload
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ env.ARTIFACT }}
           path: ${{ runner.temp }}/artifact/
@@ -238,18 +226,18 @@ jobs:
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           sparse-checkout: farm
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           path: artifacts
       - name: Summarize
         run: |
           python3 farm/summarize.py artifacts farm/prs.json summary.md > /dev/null
           cat summary.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: summary
           path: summary.md
