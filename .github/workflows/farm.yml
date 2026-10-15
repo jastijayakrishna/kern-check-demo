@@ -6,6 +6,9 @@ on:
       limit:
         description: Run only the first N pull requests of farm/prs.json (0 runs all of them)
         default: "0"
+      only:
+        description: Run only these pull requests, as owner/repo#number separated by spaces (empty runs the list)
+        default: ""
 
 permissions:
   contents: read
@@ -24,10 +27,13 @@ jobs:
         id: list
         env:
           LIMIT: ${{ inputs.limit }}
+          ONLY: ${{ inputs.only }}
         run: |
           set -euo pipefail
           [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "::error::limit must be a whole number"; exit 1; }
-          jq -c --argjson n "$LIMIT" '(if $n > 0 then .[:$n] else . end)
+          jq -c --argjson n "$LIMIT" --arg only "$ONLY" '($only | split(" ") | map(select(length > 0))) as $wanted
+            | (if ($wanted | length) > 0 then map(select((.repo + "#" + (.number | tostring)) as $k | $wanted | index($k))) else . end)
+            | (if $n > 0 then .[:$n] else . end)
             | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha) })' farm/prs.json > plan.json
           [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::farm/prs.json lists no pull requests"; exit 1; }
           echo "prs=$(cat plan.json)" >> "$GITHUB_OUTPUT"
@@ -200,7 +206,7 @@ jobs:
             if [ -f "$W/$f" ]; then cp "$W/$f" "$A/"; fi
           done
           for f in "$W"/out/tests-*.err; do [ -f "$f" ] && cp "$f" "$A/"; done
-          for f in "$W"/out/tests-*.out; do [ -f "$f" ] && tail -c 200000 "$f" > "$A/$(basename "$f")"; done
+          for f in "$W"/out/tests-*.out; do [ -f "$f" ] && tail -c 40000000 "$f" > "$A/$(basename "$f")"; done
           true
           if [ ! -f "$A/timing.json" ]; then
             stage=$(cat "$RUNNER_TEMP/stage" 2>/dev/null || echo setup)
