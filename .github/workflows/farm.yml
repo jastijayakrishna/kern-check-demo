@@ -9,6 +9,15 @@ on:
       only:
         description: Run only these pull requests, as owner/repo#number separated by spaces (empty runs the list)
         default: ""
+      list:
+        description: The list of pull requests to read
+        default: farm/prs.json
+      offset:
+        description: Skip the first N pull requests of the list (a run takes at most 256)
+        default: "0"
+      kern:
+        description: The Kern branch, tag or commit every job builds
+        default: one
 
 permissions:
   contents: read
@@ -28,14 +37,19 @@ jobs:
         env:
           LIMIT: ${{ inputs.limit }}
           ONLY: ${{ inputs.only }}
+          LIST: ${{ inputs.list }}
+          OFFSET: ${{ inputs.offset }}
         run: |
           set -euo pipefail
-          [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "::error::limit must be a whole number"; exit 1; }
-          jq -c --argjson n "$LIMIT" --arg only "$ONLY" '($only | split(" ") | map(select(length > 0))) as $wanted
+          [[ "$LIMIT" =~ ^[0-9]+$ && "$OFFSET" =~ ^[0-9]+$ ]] || { echo "::error::limit and offset must be whole numbers"; exit 1; }
+          [[ "$LIST" =~ ^farm/[A-Za-z0-9_.-]+\.json$ && -f "$LIST" ]] || { echo "::error::list must be a JSON file in farm/"; exit 1; }
+          jq -c --argjson n "$LIMIT" --argjson o "$OFFSET" --arg only "$ONLY" '($only | split(" ") | map(select(length > 0))) as $wanted
             | (if ($wanted | length) > 0 then map(select((.repo + "#" + (.number | tostring)) as $k | $wanted | index($k))) else . end)
+            | .[$o:]
             | (if $n > 0 then .[:$n] else . end)
-            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha) })' farm/prs.json > plan.json
-          [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::farm/prs.json lists no pull requests"; exit 1; }
+            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha) })' "$LIST" > plan.json
+          [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::$LIST lists no pull requests there"; exit 1; }
+          [ "$(jq length plan.json)" -le 256 ] || { echo "::error::a run takes at most 256 pull requests; use limit and offset"; exit 1; }
           echo "prs=$(cat plan.json)" >> "$GITHUB_OUTPUT"
           echo "$(jq length plan.json) pull requests" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -49,7 +63,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: jastijayakrishna/Kerner
-          ref: one
+          ref: ${{ inputs.kern }}
           persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -178,7 +192,7 @@ jobs:
           echo "kern check $REPO#$NUMBER ($AGENT): old $OLD_SHA (base_sha $BASE_SHA), new $HEAD_SHA"
           date +%s > check-started
           started=$(date +%s)
-          KERN_CHECK_AI=0 "$KERN_BIN" --control verifier.json check "$W/pr" "$OLD_SHA" "$HEAD_SHA" out operator.json pr.md > check.json 2> check.err
+          KERN_CHECK_AI=0 KERN_KEEP=1 "$KERN_BIN" --control verifier.json check "$W/pr" "$OLD_SHA" "$HEAD_SHA" out operator.json pr.md > check.json 2> check.err
           code=$?
           seconds=$(( $(date +%s) - started ))
           cat check.json
@@ -189,14 +203,6 @@ jobs:
                seconds: $seconds, fetch_seconds: $fetch, finished: true }' > timing.json
           echo "kern check ended with $code after $seconds s"
           exit "$code"
-
-      - name: Clean
-        if: always()
-        run: |
-          W="$RUNNER_TEMP/kern-drive"
-          if [ -x "$KERN_BIN" ] && [ -f "$W/verifier.json" ] && [ -d "$W/out" ]; then
-            cd "$W" && "$KERN_BIN" --control verifier.json drive clean out || echo "::warning::kern drive clean failed"
-          fi
 
       - name: Collect
         if: always()
@@ -240,8 +246,10 @@ jobs:
         with:
           path: artifacts
       - name: Summarize
+        env:
+          LIST: ${{ inputs.list }}
         run: |
-          python3 farm/summarize.py artifacts farm/prs.json summary.md > /dev/null
+          python3 farm/summarize.py artifacts "$LIST" summary.md > /dev/null
           cat summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
