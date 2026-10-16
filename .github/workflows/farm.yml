@@ -18,6 +18,9 @@ on:
       kern:
         description: The Kern branch, tag or commit every job builds
         default: one
+      runtime:
+        description: runsc runs the pull requests' code in gVisor; runc runs it in locked containers on the throwaway runner, the way CI does
+        default: runsc
 
 permissions:
   contents: read
@@ -124,6 +127,7 @@ jobs:
           chmod +x "$KERN_BIN" && "$KERN_BIN" --version
 
       - name: gVisor
+        if: inputs.runtime != 'runc'
         shell: bash
         run: |
           echo gvisor > "$RUNNER_TEMP/stage"
@@ -139,18 +143,25 @@ jobs:
 
       - name: Verifier
         shell: bash
+        env:
+          RUNTIME: ${{ inputs.runtime == 'runc' && 'runc' || 'runsc' }}
         run: |
           echo verifier > "$RUNNER_TEMP/stage"
           [ -x "$KERN_BIN" ] || { echo "::error::Kern is not installed: the Install Kern step failed"; exit 1; }
           W="$RUNNER_TEMP/kern-drive" && rm -rf "$W" && mkdir -p "$W/checks" && cd "$W"
           real() { readlink -f "$(command -v "$1")"; }
           hash() { sha256sum "$1" | cut -d' ' -f1; }
-          runsc=$(readlink -f "$(docker info --format '{{json .Runtimes.runsc}}' | jq -r .path)")
-          printf '{"host":"github-actions","deployment":"single-vm","reviewed":"%s"}\n' "$(date -u +%F)" > host-policy.json
-          jq -n --arg docker "$(real docker)" --arg git "$(real git)" --arg runsc "$runsc" --arg version "$("$runsc" --version)" --arg policy "$W/host-policy.json" \
-            --arg dh "$(hash "$(real docker)")" --arg gh "$(hash "$(real git)")" --arg rh "$(hash "$runsc")" --arg ph "$(hash host-policy.json)" \
+          if [ "$RUNTIME" = runc ]; then
+            runtime=$(real runc)
+            printf '{"host":"github-actions","deployment":"single-vm","machine":"throwaway","reviewed":"%s"}\n' "$(date -u +%F)" > host-policy.json
+          else
+            runtime=$(readlink -f "$(docker info --format '{{json .Runtimes.runsc}}' | jq -r .path)")
+            printf '{"host":"github-actions","deployment":"single-vm","reviewed":"%s"}\n' "$(date -u +%F)" > host-policy.json
+          fi
+          jq -n --arg docker "$(real docker)" --arg git "$(real git)" --arg runtime "$runtime" --arg version "$("$runtime" --version)" --arg policy "$W/host-policy.json" \
+            --arg dh "$(hash "$(real docker)")" --arg gh "$(hash "$(real git)")" --arg rh "$(hash "$runtime")" --arg ph "$(hash host-policy.json)" --arg name "$RUNTIME" \
             '{ version: 1, role: "verifier", docker: { file: $docker, sha256: $dh, endpoint: "unix:///var/run/docker.sock" }, git: { file: $git, sha256: $gh },
-               runtime: { file: $runsc, sha256: $rh, version: $version, arguments: [] }, host_policy: { file: $policy, sha256: $ph } }' > verifier.json
+               runtime: { file: $runtime, sha256: $rh, version: $version, arguments: [], name: $name }, host_policy: { file: $policy, sha256: $ph } }' > verifier.json
           "$KERN_BIN" --control verifier.json doctor > doctor.json || { cat doctor.json; exit 1; }
           docker pull -q node:22-bookworm-slim > /dev/null
           printf '{"version":1,"cases":[{"command":["/usr/local/bin/npm","test"],"stdout":null}]}\n' > checks/test-suite.json
