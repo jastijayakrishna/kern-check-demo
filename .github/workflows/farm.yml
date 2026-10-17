@@ -50,7 +50,7 @@ jobs:
             | (if ($wanted | length) > 0 then map(select((.repo + "#" + (.number | tostring)) as $k | $wanted | index($k))) else . end)
             | .[$o:]
             | (if $n > 0 then .[:$n] else . end)
-            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha) })' "$LIST" > plan.json
+            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha), patch: (.patch // ""), round: (.round // 0) })' "$LIST" > plan.json
           [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::$LIST lists no pull requests there"; exit 1; }
           [ "$(jq length plan.json)" -le 256 ] || { echo "::error::a run takes at most 256 pull requests; use limit and offset"; exit 1; }
           echo "prs=$(cat plan.json)" >> "$GITHUB_OUTPUT"
@@ -107,6 +107,8 @@ jobs:
       BASE_SHA: ${{ matrix.pr.base_sha }}
       HEAD_SHA: ${{ matrix.pr.head_sha }}
       OLD_SHA: ${{ matrix.pr.old_sha }}
+      PATCH: ${{ matrix.pr.patch }}
+      ROUND: ${{ matrix.pr.round }}
       KERN_BIN: ${{ github.workspace }}/bin/kern
     steps:
       - name: Check out the farm's list
@@ -187,9 +189,20 @@ jobs:
             sleep 20
           done
           for c in $shas; do git -C pr cat-file -e "$c^{commit}"; done
+          if [ -n "$PATCH" ]; then
+            [[ "$PATCH" =~ ^farm/loop-patches/[A-Za-z0-9_.-]+\.patch$ && -f "$GITHUB_WORKSPACE/farm-repo/$PATCH" ]] || { echo "::error::patch must be a file in farm/loop-patches"; exit 1; }
+            ( export GIT_INDEX_FILE="$RUNNER_TEMP/loop-index" GIT_AUTHOR_NAME=kern-loop GIT_AUTHOR_EMAIL=loop@example.invalid GIT_COMMITTER_NAME=kern-loop GIT_COMMITTER_EMAIL=loop@example.invalid
+              git -C pr read-tree "$HEAD_SHA"
+              git -C pr apply --cached "$GITHUB_WORKSPACE/farm-repo/$PATCH"
+              agent_sha=$(git -C pr commit-tree "$(git -C pr write-tree)" -p "$HEAD_SHA" -m "Tests the agent wrote for Kern's tasks")
+              git -C pr update-ref refs/heads/kern-loop "$agent_sha"
+              echo "applied $PATCH: $HEAD_SHA -> $agent_sha"
+              echo "NEW_SHA=$agent_sha" >> "$GITHUB_ENV" )
+          fi
           echo "fetched $REPO ($shas) in $(( $(date +%s) - started )) s; $(du -sh pr/.git | cut -f1) on disk"
           echo "$(( $(date +%s) - started ))" > fetch-seconds
           cp "$GITHUB_WORKSPACE/farm-repo/farm/pr-texts/${REPO/\//__}__$NUMBER.md" pr.md
+          if [ -n "$PATCH" ] && [ -f "$GITHUB_WORKSPACE/farm-repo/${PATCH%.patch}.md" ]; then printf '\n\n' >> pr.md; cat "$GITHUB_WORKSPACE/farm-repo/${PATCH%.patch}.md" >> pr.md; fi
 
       - name: Kern check
         id: check
@@ -200,6 +213,7 @@ jobs:
           echo check > "$RUNNER_TEMP/stage"
           W="$RUNNER_TEMP/kern-drive" && cd "$W"
           exec > >(tee -a step.log) 2>&1
+          HEAD_SHA="${NEW_SHA:-$HEAD_SHA}"
           echo "kern check $REPO#$NUMBER ($AGENT): old $OLD_SHA (base_sha $BASE_SHA), new $HEAD_SHA"
           date +%s > check-started
           started=$(date +%s)
@@ -233,7 +247,8 @@ jobs:
               --arg why "$why" --argjson seconds "$seconds" \
               '{ repo: $repo, number: $number, agent: $agent, base_sha: $base, old_sha: $old, head_sha: $head, seconds: $seconds, finished: false, why: $why }' > "$A/timing.json"
           fi
-          echo "ARTIFACT=receipt-${REPO/\//__}__$NUMBER" >> "$GITHUB_ENV"
+          suffix=""; [ "${ROUND:-0}" = 0 ] || suffix="__r$ROUND"
+          echo "ARTIFACT=receipt-${REPO/\//__}__$NUMBER$suffix" >> "$GITHUB_ENV"
 
       - name: Upload
         if: always()
