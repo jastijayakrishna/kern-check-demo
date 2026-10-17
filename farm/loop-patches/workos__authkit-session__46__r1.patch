@@ -1,0 +1,24 @@
+diff --git a/src/core/AuthKitCore.spec.ts b/src/core/AuthKitCore.spec.ts
+index 47ff52c..031f15d 100644
+--- a/src/core/AuthKitCore.spec.ts
++++ b/src/core/AuthKitCore.spec.ts
+@@ -753,6 +753,19 @@ describe('AuthKitCore', () => {
+       ).rejects.toMatchObject({ name: 'PKCECookieMissingError' });
+     });
+ 
++    it('gives a user-facing message without internal details when cookie missing', async () => {
++      await expect(
++        core.verifyCallbackState({
++          stateFromUrl: 'x',
++          cookieValue: undefined,
++        }),
++      ).rejects.toMatchObject({
++        name: 'PKCECookieMissingError',
++        message:
++          'Sign-in session could not be verified. Please try signing in again.',
++      });
++    });
++
+     it('throws OAuthStateMismatchError when values differ', async () => {
+       await expect(
+         core.verifyCallbackState({ stateFromUrl: 'a', cookieValue: 'b' }),
