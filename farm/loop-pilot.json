@@ -1,0 +1,16 @@
+[
+ {
+  "repo": "workos/authkit-session",
+  "number": 46,
+  "agent": "devin",
+  "title": "fix: Improve PKCE cookie missing error message",
+  "base_sha": "02bdbc92f998b51179930060ac21cf7e84d4e554",
+  "head_sha": "900b4c91091360344e2a4b26c80035fc59d9a0c3",
+  "merged_at": "2026-06-18T14:00:27Z",
+  "runner": "vitest",
+  "why": "Agent: author is devin-ai-integration[bot]; PR text links a Devin session (app.devin.ai/sessions); branch devin/1781724466-improve-error-message (Devin names its branches devin/...); commits by devin-ai-integration[bot]. Changes 1 source and 0 test files, 1 files and 2 lines in all. Root package.json at base_sha has vitest. Small repository (12 stars, owned by an organization), not a well-known company.",
+  "merge_base": "02bdbc92f998b51179930060ac21cf7e84d4e554",
+  "patch": "farm/loop-patches/workos__authkit-session__46__r1.patch",
+  "round": 1
+ }
+]
