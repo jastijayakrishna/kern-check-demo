@@ -1,0 +1,81 @@
+diff --git a/packages/webdriverio/tests/commands/element/getHTMLExcludeElements.test.ts b/packages/webdriverio/tests/commands/element/getHTMLExcludeElements.test.ts
+new file mode 100644
+index 0000000..eadeb64
+--- /dev/null
++++ b/packages/webdriverio/tests/commands/element/getHTMLExcludeElements.test.ts
+@@ -0,0 +1,75 @@
++/**
++ * @vitest-environment jsdom
++ */
++import path from 'node:path'
++import { expect, describe, it, afterEach, vi } from 'vitest'
++import { ELEMENT_KEY } from 'webdriver'
++
++import { remote } from '../../../src/index.js'
++
++vi.mock('fetch')
++vi.mock('@wdio/logger', () => import(path.join(process.cwd(), '__mocks__', '@wdio/logger')))
++
++const SNAPSHOT_HTML = '<section id="snapshot"><span>Keep</span><style>p { color: red }</style></section>'
++
++describe('getHTML excludeElements', () => {
++    afterEach(() => {
++        document.body.innerHTML = ''
++        vi.mocked(fetch).mockClear()
++    })
++
++    it.each([
++        [true, '<section id="snapshot"><span>Keep</span></section>'],
++        [false, '<span>Keep</span>']
++    ])('should remove excluded elements when not piercing shadow roots (includeSelectorTag: %s)', async (includeSelectorTag, expected) => {
++        const browser = await remote({
++            baseUrl: 'http://foobar.com',
++            capabilities: {
++                browserName: 'foobar'
++            }
++        })
++        const elem = await browser.$('#snapshot')
++        document.body.innerHTML = SNAPSHOT_HTML
++        const section = document.querySelector('section') as HTMLElement
++        const runInPage = (script: (...args: unknown[]) => unknown, _element: unknown, ...args: unknown[]) => (
++            Promise.resolve(script(section, ...args))
++        )
++        vi.spyOn(browser, 'execute').mockImplementation(runInPage as unknown as typeof browser.execute)
++
++        const result = await elem.getHTML({
++            excludeElements: ['style'],
++            pierceShadowRoot: false,
++            includeSelectorTag,
++            prettify: false
++        })
++
++        expect(result).toBe(expected)
++        expect(document.body.innerHTML).toBe(SNAPSHOT_HTML)
++    })
++
++    it('should forward excludeElements to Node.js when running in the browser runner', async () => {
++        const browser = await remote({
++            capabilities: {
++                browserName: 'bidi'
++            }
++        })
++        const elem = await browser.$({ [ELEMENT_KEY]: 'shadow-host' })
++        const executeWithScope = vi.fn().mockResolvedValue('<shadow-host></shadow-host>')
++        globalThis.wdio = { execute: vi.fn(), executeWithScope }
++
++        try {
++            const result = await elem.getHTML({ excludeElements: ['style', '.omit'], prettify: false })
++            expect(result).toBe('<shadow-host></shadow-host>')
++        } finally {
++            Reflect.deleteProperty(globalThis, 'wdio')
++        }
++
++        expect(executeWithScope).toHaveBeenCalledWith('getHTML', 'shadow-host', {
++            includeSelectorTag: true,
++            pierceShadowRoot: true,
++            removeCommentNodes: true,
++            prettify: false,
++            excludeElements: ['style', '.omit']
++        })
++    })
++})
