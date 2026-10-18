@@ -1,0 +1,105 @@
+diff --git a/src/utils/command-telemetry.spec.ts b/src/utils/command-telemetry.spec.ts
+index 7282cc0..210d89b 100644
+--- a/src/utils/command-telemetry.spec.ts
++++ b/src/utils/command-telemetry.spec.ts
+@@ -22,6 +22,10 @@ describe('command-telemetry', () => {
+     it('only aliases the first part', () => {
+       expect(resolveCanonicalName(['org', 'org'])).toBe('organization.org');
+     });
++
++    it('resolves the connections alias to connection', () => {
++      expect(resolveCanonicalName(['connections', 'create'])).toBe('connection.create');
++    });
+   });
+ 
+   describe('resolveCommandNameFromRawArgs', () => {
+@@ -33,6 +37,10 @@ describe('command-telemetry', () => {
+       expect(resolveCommandNameFromRawArgs(['org', 'create'])).toBe('organization');
+     });
+ 
++    it('records the connections alias as connection', () => {
++      expect(resolveCommandNameFromRawArgs(['connections', 'update'])).toBe('connection');
++    });
++
+     it('records only the top-level command, never positional values (no PII/secret leak)', () => {
+       // `onboard-user <email>` takes a positional value; it must not reach command.name.
+       expect(resolveCommandNameFromRawArgs(['onboard-user', 'nick@example.com'])).toBe('onboard-user');
+diff --git a/src/utils/help-json.spec.ts b/src/utils/help-json.spec.ts
+index 0acb7f0..d65629b 100644
+--- a/src/utils/help-json.spec.ts
++++ b/src/utils/help-json.spec.ts
+@@ -28,6 +28,10 @@ describe('help-json', () => {
+     it('resolves command aliases', () => {
+       expect(extractHelpJsonCommand(['org', '--help', '--json'])).toBe('organization');
+     });
++
++    it('resolves the connections alias to connection', () => {
++      expect(extractHelpJsonCommand(['connections', '--help', '--json'])).toBe('connection');
++    });
+   });
+ 
+   describe('buildCommandTree() — full tree', () => {
+@@ -119,6 +123,13 @@ describe('help-json', () => {
+       expect(subNames).toEqual(expect.arrayContaining(['get', 'list', 'update', 'delete']));
+     });
+ 
++    it('returns connection subtree with create and update subcommands', () => {
++      const tree = buildCommandTree('connection');
++      expect(tree.name).toBe('connection');
++      const subNames = tree.commands!.map((c) => c.name);
++      expect(subNames).toEqual(expect.arrayContaining(['list', 'get', 'create', 'update', 'delete']));
++    });
++
+     it('returns full tree for unknown subcommand', () => {
+       const tree = buildCommandTree('nonexistent');
+       expect(tree).toHaveProperty('name', 'workos');
+@@ -154,6 +165,11 @@ describe('help-json', () => {
+       const claim = env.commands!.find((c) => c.name === 'claim');
+       expect(claim!.description).toMatch(/permanent/i);
+     });
++
++    it('connection description no longer says it is read/delete only', () => {
++      const tree = buildCommandTree('connection');
++      expect(tree.description).toBe('Manage SSO connections');
++    });
+   });
+ 
+   describe('positional schemas', () => {
+@@ -194,6 +210,15 @@ describe('help-json', () => {
+       const userId = update!.positionals!.find((p) => p.name === 'userId');
+       expect(userId!.required).toBe(true);
+     });
++
++    it('connection update has required id positional', () => {
++      const connection = buildCommandTree('connection');
++      const update = connection.commands!.find((c) => c.name === 'update');
++      expect(update).toBeDefined();
++      const id = update!.positionals!.find((p) => p.name === 'id');
++      expect(id).toBeDefined();
++      expect(id!.required).toBe(true);
++    });
+   });
+ 
+   describe('option schemas', () => {
+@@ -222,5 +247,21 @@ describe('help-json', () => {
+       expect(optNames).toEqual(expect.arrayContaining(['email', 'environment-id']));
+       expect(optNames).not.toContain('organization');
+     });
++
++    it('connection create has field and request body options', () => {
++      const connection = buildCommandTree('connection');
++      const create = connection.commands!.find((c) => c.name === 'create');
++      expect(create).toBeDefined();
++      const optNames = create!.options!.map((o) => o.name);
++      expect(optNames).toEqual(['org', 'name', 'external-id', 'type', 'data', 'file']);
++    });
++
++    it('connection update has the create options except org', () => {
++      const connection = buildCommandTree('connection');
++      const update = connection.commands!.find((c) => c.name === 'update');
++      expect(update).toBeDefined();
++      const optNames = update!.options!.map((o) => o.name);
++      expect(optNames).toEqual(['name', 'external-id', 'type', 'data', 'file']);
++    });
+   });
+ });
