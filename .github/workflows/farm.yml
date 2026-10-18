@@ -50,7 +50,7 @@ jobs:
             | (if ($wanted | length) > 0 then map(select((.repo + "#" + (.number | tostring)) as $k | $wanted | index($k))) else . end)
             | .[$o:]
             | (if $n > 0 then .[:$n] else . end)
-            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha), patch: (.patch // ""), round: (.round // 0) })' "$LIST" > plan.json
+            | map({ repo, number, agent, base_sha, head_sha, old_sha: (.merge_base // .base_sha), patch: (.patch // ""), round: (.round // 0), investigation: (.investigation // "") })' "$LIST" > plan.json
           [ "$(jq length plan.json)" -gt 0 ] || { echo "::error::$LIST lists no pull requests there"; exit 1; }
           [ "$(jq length plan.json)" -le 256 ] || { echo "::error::a run takes at most 256 pull requests; use limit and offset"; exit 1; }
           echo "prs=$(cat plan.json)" >> "$GITHUB_OUTPUT"
@@ -109,6 +109,7 @@ jobs:
       OLD_SHA: ${{ matrix.pr.old_sha }}
       PATCH: ${{ matrix.pr.patch }}
       ROUND: ${{ matrix.pr.round }}
+      INVESTIGATION: ${{ matrix.pr.investigation }}
       KERN_BIN: ${{ github.workspace }}/bin/kern
     steps:
       - name: Check out the farm's list
@@ -217,6 +218,10 @@ jobs:
           echo "kern check $REPO#$NUMBER ($AGENT): old $OLD_SHA (base_sha $BASE_SHA), new $HEAD_SHA"
           date +%s > check-started
           started=$(date +%s)
+          if [ -n "$INVESTIGATION" ]; then
+            [[ "$INVESTIGATION" =~ ^farm/investigations/[A-Za-z0-9_.-]+\.json$ && -f "$GITHUB_WORKSPACE/farm-repo/$INVESTIGATION" ]] || { echo "::error::investigation must be a file in farm/investigations"; exit 1; }
+            export KERN_INVESTIGATION="$GITHUB_WORKSPACE/farm-repo/$INVESTIGATION"
+          fi
           KERN_CHECK_AI=0 KERN_KEEP=1 "$KERN_BIN" --control verifier.json check "$W/pr" "$OLD_SHA" "$HEAD_SHA" out operator.json pr.md > check.json 2> check.err
           code=$?
           seconds=$(( $(date +%s) - started ))
@@ -236,7 +241,7 @@ jobs:
           for f in out/receipt.json out/receipt.md out/setup.json check.json check.err step.log timing.json; do
             if [ -f "$W/$f" ]; then cp "$W/$f" "$A/"; fi
           done
-          for f in "$W"/out/tests-*.err "$W"/out/tests-*.values "$W"/out/faults*.json "$W"/out/types-*.out "$W"/out/build-*.out "$W"/out/trace-*.jsonl "$W"/out/probes*.json; do [ -f "$f" ] && cp "$f" "$A/"; done
+          for f in "$W"/out/tests-*.err "$W"/out/tests-*.values "$W"/out/faults*.json "$W"/out/types-*.out "$W"/out/build-*.out "$W"/out/trace-*.jsonl "$W"/out/probes*.json "$W"/out/probe-*.jsonl "$W"/out/trace-probe-*.err; do [ -f "$f" ] && cp "$f" "$A/"; done
           for f in "$W"/out/tests-*.out; do [ -f "$f" ] && tail -c 40000000 "$f" > "$A/$(basename "$f")"; done
           true
           if [ ! -f "$A/timing.json" ]; then
