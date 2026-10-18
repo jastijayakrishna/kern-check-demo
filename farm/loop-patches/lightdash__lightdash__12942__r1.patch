@@ -1,0 +1,64 @@
+diff --git a/packages/backend/src/services/ProjectService/ProjectService.test.ts b/packages/backend/src/services/ProjectService/ProjectService.test.ts
+index bbaba12..8263049 100644
+--- a/packages/backend/src/services/ProjectService/ProjectService.test.ts
++++ b/packages/backend/src/services/ProjectService/ProjectService.test.ts
+@@ -5,6 +5,9 @@ import {
+     OrganizationMemberRole,
+     ParameterError,
+     SessionUser,
++    VizAggregationOptions,
++    VizIndexType,
++    WarehouseTypes,
+ } from '@lightdash/common';
+ import { analyticsMock } from '../../analytics/LightdashAnalytics.mock';
+ import { S3Client } from '../../clients/Aws/s3';
+@@ -432,3 +435,49 @@ describe('ProjectService', () => {
+         });
+     });
+ });
++
++describe('applyPivotToSqlQuery', () => {
++    test('should drop a trailing -- comment so it does not comment out the rest of the pivot query', () => {
++        const result = ProjectService.applyPivotToSqlQuery({
++            warehouseType: WarehouseTypes.POSTGRES,
++            sql: 'SELECT * FROM orders -- all orders',
++            limit: 10,
++            indexColumn: { reference: 'status', type: VizIndexType.CATEGORY },
++            valuesColumns: [
++                { reference: 'amount', aggregation: VizAggregationOptions.SUM },
++            ],
++            groupByColumns: undefined,
++            sortBy: undefined,
++        });
++
++        expect(result).toBe(
++            'WITH original_query AS (SELECT * FROM orders), ' +
++                'group_by_query AS (SELECT "status", sum("amount") AS "amount_sum" FROM original_query group by "status")' +
++                '\nSELECT * FROM group_by_query  LIMIT 10 ',
++        );
++    });
++
++    test('should drop // comments from the user sql when pivoting by a group column', () => {
++        const result = ProjectService.applyPivotToSqlQuery({
++            warehouseType: WarehouseTypes.POSTGRES,
++            sql: 'SELECT order_date, status, amount // order fields\nFROM orders;',
++            limit: 100,
++            indexColumn: {
++                reference: 'order_date',
++                type: VizIndexType.CATEGORY,
++            },
++            valuesColumns: [
++                { reference: 'amount', aggregation: VizAggregationOptions.SUM },
++            ],
++            groupByColumns: [{ reference: 'status' }],
++            sortBy: undefined,
++        });
++
++        expect(result).toBe(
++            'WITH original_query AS (SELECT order_date, status, amount\nFROM orders), ' +
++                'group_by_query AS (SELECT "status", "order_date", sum("amount") AS "amount_sum" FROM original_query group by "status", "order_date"), ' +
++                'pivot_query AS (SELECT order_date, "status", "amount_sum", dense_rank() over (order by "order_date" ASC) as "row_index", dense_rank() over (order by "status") as "column_index" FROM group_by_query)' +
++                '\nSELECT * FROM pivot_query WHERE "row_index" <= 100 and "column_index" <= 10 order by "row_index", "column_index"',
++        );
++    });
++});
