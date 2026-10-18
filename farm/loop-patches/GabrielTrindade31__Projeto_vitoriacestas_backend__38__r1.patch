@@ -1,0 +1,58 @@
+diff --git a/tests/unit/imageCache.test.js b/tests/unit/imageCache.test.js
+new file mode 100644
+index 0000000..3aa3e1d
+--- /dev/null
++++ b/tests/unit/imageCache.test.js
+@@ -0,0 +1,52 @@
++const path = require('path');
++const { createImageCacheMiddleware } = require('../../src/middlewares/imageCache');
++
++function buildResponse() {
++  return {
++    set: jest.fn(),
++    send: jest.fn(),
++  };
++}
++
++describe('createImageCacheMiddleware', () => {
++  const basePath = path.join(__dirname, '__pasta_inexistente__');
++
++  it('serve imagem do cache quando salva como string base64 pura', async () => {
++    const redis = {
++      get: jest.fn().mockResolvedValue(Buffer.from('imagem-png').toString('base64')),
++      set: jest.fn(),
++    };
++    const middleware = createImageCacheMiddleware({ redis, basePath });
++    const req = { method: 'GET', path: '/logo.png' };
++    const res = buildResponse();
++    const next = jest.fn();
++
++    await middleware(req, res, next);
++
++    expect(redis.get).toHaveBeenCalledWith('image:public:logo.png');
++    expect(next).not.toHaveBeenCalled();
++    expect(res.set).toHaveBeenCalledWith('Content-Type', 'image/png');
++    expect(res.send).toHaveBeenCalledTimes(1);
++    expect(res.send.mock.calls[0][0].toString()).toBe('imagem-png');
++  });
++
++  it('serve imagem do cache quando salva como objeto com contentType', async () => {
++    const redis = {
++      get: jest.fn().mockResolvedValue({
++        contentType: 'image/webp',
++        data: Buffer.from('imagem-webp').toString('base64'),
++      }),
++      set: jest.fn(),
++    };
++    const middleware = createImageCacheMiddleware({ redis, basePath });
++    const req = { method: 'GET', path: '/banner.png' };
++    const res = buildResponse();
++    const next = jest.fn();
++
++    await middleware(req, res, next);
++
++    expect(next).not.toHaveBeenCalled();
++    expect(res.set).toHaveBeenCalledWith('Content-Type', 'image/webp');
++    expect(res.send.mock.calls[0][0].toString()).toBe('imagem-webp');
++  });
++});
