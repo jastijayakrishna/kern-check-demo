@@ -1,0 +1,72 @@
+diff --git a/src/unit-tests/modules/copen-manager.test.js b/src/unit-tests/modules/copen-manager.test.js
+index 2d335a7..82363c7 100644
+--- a/src/unit-tests/modules/copen-manager.test.js
++++ b/src/unit-tests/modules/copen-manager.test.js
+@@ -86,10 +86,21 @@ describe('copen-manager', () => {
+       expect(ids).toContain('claude');
+       expect(ids).toContain('codex');
+       expect(ids).toContain('copilot');
++      expect(ids).toContain('devin');
+       expect(ids).toContain('qwen');
+       expect(ids).toContain('gemini');
+       expect(ids).toContain('chatgpt');
+     });
++
++    it('should include Devin opening app.devin.ai', () => {
++      expect(DEFAULT_COPENS.find(c => c.id === 'devin')).toEqual({
++        id: 'devin',
++        label: 'Devin',
++        icon: 'engineering',
++        url: 'https://app.devin.ai',
++        isDefault: true
++      });
++    });
+   });
+ 
+   describe('getCustomCopenIcon', () => {
+@@ -153,6 +164,30 @@ describe('copen-manager', () => {
+       expect(codex.disabled).toBe(false);
+     });
+ 
++    it('should append Devin, enabled, for a user whose saved order predates it', async () => {
++      mockDoc.exists = true;
++      mockDoc.data.mockReturnValue({
++        customCopens: [],
++        disabledDefaults: [],
++        order: ['blank', 'allhands', 'claude', 'codex', 'copilot', 'qwen', 'gemini', 'chatgpt']
++      });
++      mockDocRef.get.mockResolvedValue(mockDoc);
++
++      const copens = await getUserCopens('user123');
++
++      expect(copens.map(c => c.id)).toEqual([
++        'blank', 'allhands', 'claude', 'codex', 'copilot', 'qwen', 'gemini', 'chatgpt', 'devin'
++      ]);
++      expect(copens[copens.length - 1]).toEqual({
++        id: 'devin',
++        label: 'Devin',
++        icon: 'engineering',
++        url: 'https://app.devin.ai',
++        isDefault: true,
++        disabled: false
++      });
++    });
++
+     it('should return defaults on error', async () => {
+       mockDocRef.get.mockRejectedValue(new Error('Firestore error'));
+       
+diff --git a/src/unit-tests/utils/copen-config.test.js b/src/unit-tests/utils/copen-config.test.js
+index 8462c71..ee5943f 100644
+--- a/src/unit-tests/utils/copen-config.test.js
++++ b/src/unit-tests/utils/copen-config.test.js
+@@ -46,6 +46,10 @@ describe('copen-config', () => {
+       });
+     });
+ 
++    it('should include Devin in COPEN_OPTIONS_STATIC', () => {
++      expect(COPEN_OPTIONS_STATIC).toContainEqual({ value: 'devin', label: 'Devin', icon: 'engineering' });
++    });
++
+     it('should export COPEN_OPTIONS for backward compatibility', () => {
+       expect(COPEN_OPTIONS).toBe(COPEN_OPTIONS_STATIC);
+     });
