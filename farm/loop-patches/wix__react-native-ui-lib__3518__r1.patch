@@ -1,0 +1,52 @@
+diff --git a/src/components/checkbox/__tests__/index.spec.tsx b/src/components/checkbox/__tests__/index.spec.tsx
+index 411e137..cf6e9c3 100644
+--- a/src/components/checkbox/__tests__/index.spec.tsx
++++ b/src/components/checkbox/__tests__/index.spec.tsx
+@@ -63,6 +63,22 @@ describe('Checkbox renderer test', () => {
+     );
+   });
+ 
++  describe('Hit target', () => {
++    it('should extend the hit area of a default size checkbox to 48x48', () => {
++      const renderTree = render(<TestCase/>);
++      const driver = CheckboxDriver({renderTree, testID});
++
++      expect(driver.getElement().props.hitSlop).toBe(12);
++    });
++
++    it('should extend the hit area of a custom size checkbox to 48x48', () => {
++      const renderTree = render(<TestCase size={20}/>);
++      const driver = CheckboxDriver({renderTree, testID});
++
++      expect(driver.getElement().props.hitSlop).toBe(14);
++    });
++  });
++
+   describe('Press', () => {
+     it('Multiple clicks', async () => {
+       const props = {onValueChange};
+diff --git a/src/components/radioButton/__tests__/index.spec.tsx b/src/components/radioButton/__tests__/index.spec.tsx
+index d9f430f..8ca1211 100644
+--- a/src/components/radioButton/__tests__/index.spec.tsx
++++ b/src/components/radioButton/__tests__/index.spec.tsx
+@@ -38,4 +38,20 @@ describe('RadioButton renderer test', () => {
+     expect(await driver.hasLabel()).toBeTruthy();
+     expect(await driver.hasIcon()).toBeTruthy();
+   });
++
++  it('should extend the hit area of a default size RadioButton to 48 high', async () => {
++    const component = <TestCase onPress={() => {}}/>;
++    const driver = new RadioButtonDriver({component, testID});
++
++    const props = await driver.getElementProps();
++    expect(props.hitSlop).toEqual({top: 12, bottom: 12});
++  });
++
++  it('should extend the hit area of a custom size RadioButton to 48 high', async () => {
++    const component = <TestCase size={20} onPress={() => {}}/>;
++    const driver = new RadioButtonDriver({component, testID});
++
++    const props = await driver.getElementProps();
++    expect(props.hitSlop).toEqual({top: 14, bottom: 14});
++  });
+ });
