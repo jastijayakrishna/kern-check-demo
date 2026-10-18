@@ -1,0 +1,5 @@
+### Why `runCli` in `src/bin.ts` has no new test
+
+`src/bin.ts` calls `runCli()` when it is loaded and exports nothing. A test cannot load it in-process without starting the whole CLI: the crash reporter, telemetry store-and-forward with its flush to the API, keychain and config reads, and `process.exit`. The project's own tests for this file (`src/bin-default-command.integration.spec.ts`, `src/bin-command-telemetry.integration.spec.ts`) run it as a separate process under the Bun runtime (`#!/usr/bin/env bun`, `engines.bun`). Bun is not a package dependency, so a test environment that has only Node cannot run it.
+
+The change to `runCli` only wires up commands. It registers `connections` as an alias of `connection` and adds the `create` and `update` subcommands, which pass their flags to `runConnectionCreate` and `runConnectionUpdate`. Those two functions are tested directly in `src/commands/connection.spec.ts`. The alias and the `create`/`update` help schema are tested in `src/utils/command-telemetry.spec.ts` and `src/utils/help-json.spec.ts`.
