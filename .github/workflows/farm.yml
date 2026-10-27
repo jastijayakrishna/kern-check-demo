@@ -241,7 +241,7 @@ jobs:
           for f in out/receipt.json out/receipt.md out/setup.json check.json check.err step.log timing.json; do
             if [ -f "$W/$f" ]; then cp "$W/$f" "$A/"; fi
           done
-          for f in "$W"/out/tests-*.err "$W"/out/tests-*.values "$W"/out/faults*.json "$W"/out/types-*.out "$W"/out/build-*.out "$W"/out/trace-*.jsonl "$W"/out/probes*.json "$W"/out/probe-*.jsonl "$W"/out/trace-probe-*.err "$W"/out/map.json "$W"/out/map.err; do [ -f "$f" ] && cp "$f" "$A/"; done
+          for f in "$W"/out/tests-*.err "$W"/out/tests-*.values "$W"/out/faults*.json "$W"/out/types-*.out "$W"/out/build-*.out "$W"/out/prepare-*.err "$W"/out/prepare-*.json "$W"/out/seal-*.err "$W"/out/trace-*.jsonl "$W"/out/probes*.json "$W"/out/probe-*.jsonl "$W"/out/trace-probe-*.err "$W"/out/map.json "$W"/out/map.err; do [ -f "$f" ] && cp "$f" "$A/"; done
           for f in "$W"/out/tests-*.out; do [ -f "$f" ] && tail -c 40000000 "$f" > "$A/$(basename "$f")"; done
           true
           if [ ! -f "$A/timing.json" ]; then
