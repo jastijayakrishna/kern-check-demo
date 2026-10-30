@@ -14,8 +14,8 @@ describe('discount', () => {
 });
 
 describe('shipping', () => {
-  test('free from 50.00', () => expect(shipping(5000)).toBe(0));
-  test('4.99 below 50.00', () => expect(shipping(4999)).toBe(499));
+  test('free from 60.00', () => expect(shipping(6000)).toBe(0));
+  test('4.99 below 60.00', () => expect(shipping(5999)).toBe(499));
 });
 
 test('checkout: discount first, then shipping', () => expect(checkout([{ price: 5000, qty: 2 }])).toBe(9000));
