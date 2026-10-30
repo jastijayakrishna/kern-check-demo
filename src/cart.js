@@ -14,9 +14,9 @@ export function discount(cents) {
   return cents >= 10000 ? Math.floor(cents * 0.9) : cents;
 }
 
-// Shipping costs 4.99, and is free from 50.00 (after the discount).
+// Shipping costs 4.99, and is free from 60.00 (after the discount).
 export function shipping(cents) {
-  return cents >= 5000 ? 0 : 499;
+  return cents >= 6000 ? 0 : 499;
 }
 
 // What the customer pays.
